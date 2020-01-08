@@ -5,11 +5,10 @@ import features from '../libs/features';
 import * as api from '../libs/api';
 import {getOwnerAndRepo, getRepoURL, getRepoGQL} from '../libs/utils';
 
-type Counts = {
-	repoProjectCount: number;
-	orgProjectCount: number;
-	milestoneCount: number;
-};
+interface Counts {
+	projects: number;
+	milestones: number;
+}
 
 const getCounts = cache.function(async (): Promise<Counts> => {
 	const {repository, organization} = await api.v4(`
@@ -25,13 +24,16 @@ const getCounts = cache.function(async (): Promise<Counts> => {
 	});
 
 	return {
-		repoProjectCount: repository.projects.totalCount,
-		orgProjectCount: organization ? organization.projects.totalCount : 0,
-		milestoneCount: repository.milestones.totalCount
+		projects:
+			(repository.projects.totalCount as number) +
+			(organization?.projects?.totalCount as number),
+		milestones: repository.milestones.totalCount
 	};
 }, {
 	expiration: 3,
-	cacheKey: () => __featureName__ + ':' + getRepoURL()
+	cacheKey: () => __featureName__ + ':' + getRepoURL(),
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	isExpired: (value: any) => 'repoProjectCount' in value
 });
 
 function removeParent(element?: Element): void {
@@ -41,13 +43,13 @@ function removeParent(element?: Element): void {
 }
 
 async function init(): Promise<void> {
-	const {repoProjectCount, orgProjectCount, milestoneCount} = await getCounts();
+	const {projects, milestones} = await getCounts();
 
-	if (repoProjectCount === 0 && orgProjectCount === 0) {
+	if (projects === 0) {
 		elementReady('[data-hotkey="p"]').then(removeParent);
 	}
 
-	if (milestoneCount === 0) {
+	if (milestones === 0) {
 		elementReady('[data-hotkey="m"]').then(removeParent);
 	}
 }
